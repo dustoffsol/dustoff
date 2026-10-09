@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dustoff — Reclaim the SOL locked in empty token accounts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
+<style>
+:root{--bg:#07060b;--panel:#100e1a;--line:#26203d;--violet:#8b5cf6;--lilac:#c4b5fd;--text:#f4f2fb;--mute:#9a94b3}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:radial-gradient(700px 420px at 50% -80px,#6d3fe055,transparent 70%),var(--bg);color:var(--text);font-family:Manrope,system-ui,sans-serif;line-height:1.65;min-height:100vh;-webkit-font-smoothing:antialiased}
+a{color:var(--lilac)}
+header,main,footer{max-width:760px;margin:0 auto;padding:0 22px}
+header{display:flex;justify-content:space-between;align-items:center;padding-top:24px;padding-bottom:24px}
+.logo{font-weight:800;font-size:1.3rem;letter-spacing:-.03em}
+.logo span{color:var(--violet)}
+button{font:inherit;cursor:pointer;border:0;border-radius:999px;padding:12px 24px;font-weight:700;color:#fff;background:var(--violet);box-shadow:0 8px 28px -8px #8b5cf6aa;transition:transform .15s,box-shadow .15s,background .15s}
+button:hover{background:#9d74fa;transform:translateY(-1px)}
+button:focus-visible{outline:3px solid var(--lilac);outline-offset:3px}
+button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--text);box-shadow:none}
+button.ghost:hover{background:#ffffff0d}
+.space{max-width:760px;margin:0 auto;padding:0 22px}
+.space svg{display:block;width:100%;height:auto;overflow:visible}
+.f1{animation:bob 5s ease-in-out infinite}
+.f2{animation:bob 7s ease-in-out -2s infinite}
+@keyframes bob{0%,100%{translate:0 0}50%{translate:6px -8px}}
+@media (prefers-reduced-motion:reduce){.f1,.f2{animation:none}}
+h1{font-size:clamp(2.4rem,8vw,4.2rem);line-height:1.04;letter-spacing:-.04em;margin:12px 0 16px;font-weight:800;text-align:center}
+.lead{color:var(--mute);max-width:52ch;font-size:1.08rem;margin:0 auto 36px;text-align:center}
+.card{background:linear-gradient(180deg,#171329,var(--panel));border:1px solid var(--line);border-radius:28px;padding:34px 28px;text-align:center;box-shadow:0 30px 80px -30px #8b5cf655}
+.label{color:var(--mute);font-weight:600;font-size:.95rem}
+.big{font-size:clamp(2.8rem,12vw,4.6rem);font-weight:800;letter-spacing:-.04em;line-height:1.1;margin:6px 0;color:var(--lilac);text-shadow:0 0 40px #8b5cf688}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center;margin-top:24px}
+#status{color:var(--mute);margin:16px 0 0;min-height:1.6em}
+#status.err{color:#ff8fa8}
+.how{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:28px;margin:56px 0}
+.how div{border-top:2px solid var(--violet);padding-top:14px}
+.how h3{margin:0 0 6px;font-size:1.05rem}
+.how p{margin:0;color:var(--mute);font-size:.93rem}
+footer{color:var(--mute);font-size:.82rem;padding-top:10px;padding-bottom:48px;text-align:center}
+@media (prefers-reduced-motion:reduce){button{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Dust<span>off</span></div>
+  <button id="connect">Connect wallet</button>
+</header>
+<div class="space" aria-hidden="true">
+<svg viewBox="0 0 760 210" role="img" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="pA" cx="35%" cy="30%" r="80%"><stop offset="0" stop-color="#c4b5fd"/><stop offset=".55" stop-color="#8b5cf6"/><stop offset="1" stop-color="#3b1d8f"/></radialGradient>
+    <radialGradient id="pB" cx="35%" cy="30%" r="80%"><stop offset="0" stop-color="#f0abfc"/><stop offset="1" stop-color="#6d28d9"/></radialGradient>
+    <radialGradient id="pC" cx="35%" cy="30%" r="80%"><stop offset="0" stop-color="#ddd6fe"/><stop offset="1" stop-color="#4c1d95"/></radialGradient>
+    <linearGradient id="beam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c4b5fd" stop-opacity=".35"/><stop offset="1" stop-color="#c4b5fd" stop-opacity="0"/></linearGradient>
+    <linearGradient id="hull" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9e5ff"/><stop offset="1" stop-color="#7c6bb8"/></linearGradient>
+    <g id="ufo">
+      <polygon points="-16,10 16,10 44,110 -44,110" fill="url(#beam)"/>
+      <path d="M-14 -2 Q0 -24 14 -2Z" fill="#a78bfa" opacity=".9"/>
+      <ellipse cx="0" cy="3" rx="34" ry="9" fill="url(#hull)"/>
+      <ellipse cx="0" cy="8" rx="20" ry="4" fill="#4c1d95"/>
+      <circle cx="-20" cy="4" r="2.4" fill="#fde68a"/><circle cx="0" cy="6" r="2.4" fill="#fde68a"/><circle cx="20" cy="4" r="2.4" fill="#fde68a"/>
+    </g>
+  </defs>
+  <g fill="#fff">
+    <circle cx="40" cy="30" r="1.4" opacity=".8"/><circle cx="210" cy="24" r="1" opacity=".6"/><circle cx="300" cy="150" r="1.2" opacity=".7"/>
+    <circle cx="420" cy="30" r="1.6" opacity=".8"/><circle cx="470" cy="180" r="1" opacity=".5"/><circle cx="600" cy="20" r="1.2" opacity=".7"/>
+    <circle cx="720" cy="120" r="1.5" opacity=".8"/><circle cx="250" cy="190" r="1" opacity=".5"/><circle cx="690" cy="190" r="1" opacity=".6"/>
+    <circle cx="150" cy="190" r="1.3" opacity=".6"/><circle cx="380" cy="190" r="1" opacity=".5"/>
+  </g>
+  <g transform="translate(115 110)">
+    <ellipse rx="78" ry="16" fill="none" stroke="#a78bfa" stroke-width="5" opacity=".45" transform="rotate(-18)"/>
+    <circle r="44" fill="url(#pA)"/>
+    <path d="M-40 -6 Q0 14 40 -6" fill="none" stroke="#3b1d8f" stroke-width="3" opacity=".35"/>
+    <ellipse rx="78" ry="16" fill="none" stroke="#c4b5fd" stroke-width="5" opacity=".8" transform="rotate(-18)" clip-path="inset(0 0 -50% 0)"/>
+  </g>
+  <circle cx="660" cy="62" r="24" fill="url(#pB)"/>
+  <circle cx="652" cy="56" r="4" fill="#6d28d9" opacity=".4"/><circle cx="670" cy="72" r="3" fill="#6d28d9" opacity=".4"/>
+  <circle cx="545" cy="150" r="10" fill="url(#pC)"/>
+  <circle cx="30" cy="165" r="6" fill="url(#pB)" opacity=".8"/>
+  <use class="ufo f1" href="#ufo" x="330" y="46"/>
+  <use class="ufo f2" href="#ufo" x="0" y="0" transform="translate(500 92) scale(.6)"/>
+</svg>
+</div>
+<main>
+  <h1>Get back the SOL<br>your wallet is holding.</h1>
+  <p class="lead">Every token you've held leaves behind an empty account that locks up about 0.002 SOL in rent. Dustoff finds them and closes them so the SOL returns to you.</p>
+
+  <section class="card" aria-live="polite">
+    <div class="label">Reclaimable SOL</div>
+    <div class="big" id="amount">—</div>
+    <div id="fee" style="color:var(--mute)"></div>
+    <div id="count" style="color:var(--mute)">Connect a wallet to scan for empty accounts.</div>
+    <div class="row">
+      <button id="scan" class="ghost" disabled>Scan again</button>
+      <button id="reclaim" disabled>Reclaim SOL</button>
+    </div>
+    <p id="status"></p>
+  </section>
+
+  <section class="how">
+    <div><h3>Only empty accounts</h3><p>Accounts holding any balance are never touched. Only token accounts with exactly 0 tokens are closed.</p></div>
+    <div><h3>You approve everything</h3><p>Your wallet shows each transaction before it's signed. The rent goes back to your own address.</p></div>
+    <div><h3>Closed in batches</h3><p>Up to 20 accounts are closed per transaction to keep network fees low.</p></div>
+  </section>
+</main>
+<footer>
+  Reclaimed SOL is sent to the connected wallet, minus a 1% service fee that is shown before you sign and included in each transaction. Review every transaction in your wallet before approving. Use at your own risk.
+</footer>
+
+<script>
+// ---- Settings ----
+// Public RPCs rate-limit browsers. For a live site, use your own endpoint (Helius, QuickNode, etc.).
+const RPC_URL = "https://mainnet.helius-rpc.com/?api-key=cc9a4e1e-52ac-4ec0-9776-9d6a04810fb9";
+const BATCH = 20;
+// Service fee: 1% of the SOL reclaimed. Leave FEE_WALLET empty ("") to turn it off.
+const FEE_WALLET = "5bzbQaji2c1x911bd4oivunqJkM559x3HjtRMBrQ3BMb";
+const FEE_BPS = 100; // 100 = 1%
+// ------------------
+
+const $ = id => document.getElementById(id);
+const say = (msg, isErr) => {
+  const s = $("status"); s.textContent = msg; s.className = isErr ? "err" : "";
+  if(msg && s.scrollIntoView) s.scrollIntoView({behavior: "smooth", block: "center"}); // make sure the message is visible
+};
+window.addEventListener("error", e => say("Error: " + e.message, true));
+window.addEventListener("unhandledrejection", e => say("Error: " + ((e.reason && e.reason.message) || e.reason), true));
+const short = k => k.slice(0,4) + "…" + k.slice(-4);
+const feeOn = () => FEE_WALLET !== "" && FEE_BPS > 0;
+const feeOf = lamports => Math.floor(lamports * FEE_BPS / 10000);
+
+let conn = null, TOKEN_PROGRAM = null, provider = null, owner = null, empties = [];
+
+function ready(){
+  if(typeof solanaWeb3 === "undefined"){
+    say("Could not load the Solana library. Check your connection and reload the page.", true);
+    return false;
+  }
+  if(!conn){
+    TOKEN_PROGRAM = new solanaWeb3.PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+    conn = new solanaWeb3.Connection(RPC_URL, "confirmed");
+  }
+  return true;
+}
+
+function findProvider(){
+  const p = window.phantom && window.phantom.solana;
+  if(p && p.isPhantom) return p;
+  return window.solana || null;
+}
+
+async function waitForProvider(){
+  for(let i = 0; i < 10; i++){
+    const p = findProvider();
+    if(p) return p;
+    await new Promise(r => setTimeout(r, 200)); // wallets inject a moment after page load
+  }
+  return null;
+}
+
+async function connect(){
+  if(!ready()) return;
+  say("Connecting…");
+  provider = await waitForProvider();
+  say(provider ? "Wallet found. Approve the request in Phantom…" : "Looking for a wallet…");
+  if(!provider){
+    if(/iPhone|iPad|Android/i.test(navigator.userAgent)){
+      say("Opening Phantom…");
+      const u = encodeURIComponent(location.href.split("#")[0]);
+      location.href = "https://phantom.app/ul/browse/" + u + "?ref=" + encodeURIComponent(location.origin);
+      return;
+    }
+    say("No Solana wallet found. Install Phantom (phantom.app) and reload.", true);
+    return;
+  }
+  try{
+    const r = await provider.connect();
+    owner = r.publicKey || provider.publicKey;
+    $("connect").textContent = short(owner.toString());
+    $("scan").disabled = false;
+    await scan();
+  }catch(e){
+    say(e && e.code === 4001 ? "Connection was declined in your wallet." : "Could not connect: " + ((e && e.message) || e), true);
+  }
+}
+
+async function scan(){
+  if(!owner || !ready()) return;
+  say("Scanning…");
+  $("reclaim").disabled = true;
+  try{
+    const res = await conn.getParsedTokenAccountsByOwner(owner, {programId: TOKEN_PROGRAM});
+    empties = res.value.filter(a => a.account.data.parsed.info.tokenAmount.amount === "0");
+    const lamports = empties.reduce((s, a) => s + a.account.lamports, 0);
+    const L = solanaWeb3.LAMPORTS_PER_SOL;
+    $("amount").textContent = (lamports / L).toFixed(4) + " SOL";
+    $("fee").textContent = feeOn() && lamports
+      ? "Service fee (" + (FEE_BPS / 100) + "%): " + (feeOf(lamports) / L).toFixed(5) + " SOL. You receive " + ((lamports - feeOf(lamports)) / L).toFixed(5) + " SOL."
+      : "";
+    $("count").textContent = empties.length
+      ? empties.length + " empty account" + (empties.length > 1 ? "s" : "") + " found."
+      : "No empty accounts found. Your wallet is already tidy.";
+    $("reclaim").disabled = empties.length === 0;
+    say("");
+  }catch(e){
+    say("Scan failed. The RPC may be rate-limited; set your own RPC_URL and try again.", true);
+  }
+}
+
+function closeIx(account){
+  return new solanaWeb3.TransactionInstruction({
+    programId: TOKEN_PROGRAM,
+    keys: [
+      {pubkey: account, isSigner: false, isWritable: true},
+      {pubkey: owner,   isSigner: false, isWritable: true}, // rent goes back to you
+      {pubkey: owner,   isSigner: true,  isWritable: false}
+    ],
+    data: typeof Buffer !== "undefined" ? Buffer.from([9]) : new Uint8Array([9]) // CloseAccount
+  });
+}
+
+async function send(tx){
+  if(provider.signAndSendTransaction){
+    const r = await provider.signAndSendTransaction(tx);
+    return r.signature || r;
+  }
+  const signed = await provider.signTransaction(tx);
+  return conn.sendRawTransaction(signed.serialize());
+}
+
+async function reclaim(){
+  if(!owner || !ready()) return;
+  $("reclaim").disabled = true;
+  const batches = [];
+  for(let i = 0; i < empties.length; i += BATCH) batches.push(empties.slice(i, i + BATCH));
+  try{
+    for(let i = 0; i < batches.length; i++){
+      say("Approve transaction " + (i + 1) + " of " + batches.length + " in your wallet…");
+      const tx = new solanaWeb3.Transaction();
+      batches[i].forEach(a => tx.add(closeIx(a.pubkey)));
+      if(feeOn()){
+        const fee = feeOf(batches[i].reduce((n, a) => n + a.account.lamports, 0));
+        if(fee > 0) tx.add(solanaWeb3.SystemProgram.transfer({
+          fromPubkey: owner, toPubkey: new solanaWeb3.PublicKey(FEE_WALLET), lamports: fee
+        }));
+      }
+      const {blockhash, lastValidBlockHeight} = await conn.getLatestBlockhash();
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = owner;
+      const signature = await send(tx);
+      say("Confirming transaction " + (i + 1) + " of " + batches.length + "…");
+      await conn.confirmTransaction({signature, blockhash, lastValidBlockHeight}, "confirmed");
+    }
+    say("Done. Your SOL is back in your wallet.");
+  }catch(e){
+    say(e && e.code === 4001 ? "You declined the transaction. Nothing was changed." : "Stopped: " + ((e && e.message) || "transaction failed"), true);
+  }
+  await scan();
+}
+
+$("connect").onclick = connect;
+$("scan").onclick = scan;
+$("reclaim").onclick = reclaim;
+</script>
+</body>
+</html>
