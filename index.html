@@ -8,12 +8,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
 <script type="module">
-// The Solana library needs a global Buffer in browsers; load a pinned polyfill.
 import { Buffer } from "https://cdn.jsdelivr.net/npm/buffer@6.0.3/+esm";
 window.Buffer = Buffer;
 </script>
 <style>
-:root{--bg:#07060b;--panel:#100e1a;--line:#26203d;--violet:#8b5cf6;--lilac:#c4b5fd;--text:#f4f2fb;--mute:#9a94b3}
+:root{--bg:#07060b;--panel:#100e1a;--line:#26203d;--violet:#8b5cf6;--lilac:#c4b5fd;--text:#f4f2fb;--mute:#9a94b3;--err:#ff8fa8}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:radial-gradient(700px 420px at 50% -80px,#6d3fe055,transparent 70%),var(--bg);color:var(--text);font-family:Manrope,system-ui,sans-serif;line-height:1.65;min-height:100vh;-webkit-font-smoothing:antialiased}
@@ -41,7 +40,14 @@ h1{font-size:clamp(2.4rem,8vw,4.2rem);line-height:1.04;letter-spacing:-.04em;mar
 .big{font-size:clamp(2.8rem,12vw,4.6rem);font-weight:800;letter-spacing:-.04em;line-height:1.1;margin:6px 0;color:var(--lilac);text-shadow:0 0 40px #8b5cf688}
 .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center;margin-top:24px}
 #status{color:var(--mute);margin:16px 0 0;min-height:1.6em}
-#status.err{color:#ff8fa8}
+#status.err{color:var(--err)}
+.account-list{margin-top:24px;text-align:left;max-height:280px;overflow-y:auto;border:1px solid var(--line);border-radius:16px;background:#0c0a14}
+.account-item{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--line);font-size:.88rem}
+.account-item:last-child{border-bottom:0}
+.account-item .left{min-width:0}
+.account-item .mint{color:var(--lilac);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.account-item .addr{color:var(--mute);font-size:.78rem}
+.account-item .rent{color:var(--text);font-weight:600;white-space:nowrap}
 .how{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:28px;margin:56px 0}
 .how div{border-top:2px solid var(--violet);padding-top:14px}
 .how h3{margin:0 0 6px;font-size:1.05rem}
@@ -55,6 +61,7 @@ footer{color:var(--mute);font-size:.82rem;padding-top:10px;padding-bottom:48px;t
   <div class="logo">Dust<span>off</span></div>
   <button id="connect">Connect wallet</button>
 </header>
+
 <div class="space" aria-hidden="true">
 <svg viewBox="0 0 760 210" role="img" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -91,6 +98,7 @@ footer{color:var(--mute);font-size:.82rem;padding-top:10px;padding-bottom:48px;t
   <use class="ufo f2" href="#ufo" x="0" y="0" transform="translate(500 92) scale(.6)"/>
 </svg>
 </div>
+
 <main>
   <h1>Get back the SOL<br>your wallet is holding.</h1>
   <p class="lead">Every token you've held leaves behind an empty account that locks up about 0.002 SOL in rent. Dustoff finds them and closes them so the SOL returns to you.</p>
@@ -100,6 +108,9 @@ footer{color:var(--mute);font-size:.82rem;padding-top:10px;padding-bottom:48px;t
     <div class="big" id="amount">—</div>
     <div id="fee" style="color:var(--mute)"></div>
     <div id="count" style="color:var(--mute)">Connect a wallet to scan for empty accounts.</div>
+
+    <div id="list-container" class="account-list" style="display:none"></div>
+
     <div class="row">
       <button id="scan" class="ghost" disabled>Scan again</button>
       <button id="reclaim" disabled>Reclaim SOL</button>
@@ -111,115 +122,105 @@ footer{color:var(--mute);font-size:.82rem;padding-top:10px;padding-bottom:48px;t
   <section class="how">
     <div><h3>Only empty accounts</h3><p>Accounts holding any balance are never touched. Only token accounts with exactly 0 tokens are closed.</p></div>
     <div><h3>You approve everything</h3><p>Your wallet shows each transaction before it's signed. The rent goes back to your own address.</p></div>
-    <div><h3>Closed in batches</h3><p>Up to 20 accounts are closed per transaction to keep network fees low.</p></div>
+    <div><h3>Closed in batches</h3><p>Up to 15 accounts are closed per transaction to keep network fees low and avoid compute limits.</p></div>
   </section>
 </main>
+
 <footer>
   Reclaimed SOL is sent to the connected wallet, minus a 1% service fee that is shown before you sign and included in each transaction. Review every transaction in your wallet before approving. Use at your own risk.
 </footer>
 
 <script>
 // ---- Settings ----
-// Use your own RPC endpoint (Helius, QuickNode, etc.); public ones rate-limit browsers.
 const RPC_URL = "https://mainnet.helius-rpc.com/?api-key=cc9a4e1e-52ac-4ec0-9776-9d6a04810fb9";
-const BATCH = 20;
-// Service fee: 1% of the SOL reclaimed. Leave FEE_WALLET empty ("") to turn it off.
+const BATCH = 15;
 const FEE_WALLET = "5bzbQaji2c1x911bd4oivunqJkM559x3HjtRMBrQ3BMb";
-const FEE_BPS = 100; // 100 = 1%
-const NETWORK_FEE_BUFFER = 20000; // lamports a wallet must hold per transaction to pay network fees
+const FEE_BPS = 100; // 1%
+const NETWORK_FEE_BUFFER = 30000; // lamports needed per batch
 // ------------------
 
+const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const TOKEN_2022_PROGRAM = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+
 const $ = id => document.getElementById(id);
-const say = (msg, isErr) => {
-  const s = $("status"); s.textContent = msg; s.className = isErr ? "err" : "";
-  if(msg && s.scrollIntoView) s.scrollIntoView({behavior: "smooth", block: "center"});
+const say = (msg, isErr = false) => {
+  const s = $("status");
+  s.textContent = msg;
+  s.className = isErr ? "err" : "";
+  if (msg && s.scrollIntoView) s.scrollIntoView({ behavior: "smooth", block: "center" });
 };
-window.addEventListener("error", e => { if(e.message && e.message !== "Script error.") say("Error: " + e.message, true); });
+window.addEventListener("error", e => { if (e.message && e.message !== "Script error.") say("Error: " + e.message, true); });
 window.addEventListener("unhandledrejection", e => say("Error: " + ((e.reason && e.reason.message) || e.reason), true));
-const short = k => k.slice(0,4) + "…" + k.slice(-4);
-const feeOn = () => FEE_WALLET !== "" && FEE_BPS > 0;
+
+const short = (k, n = 4) => k.slice(0, n) + "…" + k.slice(-n);
 const feeOf = lamports => Math.floor(lamports * FEE_BPS / 10000);
 
-let conn = null, TOKEN_PROGRAM = null, provider = null, owner = null, empties = [];
-let feeBal = null, minRent = null, busy = false;
+let conn = null, provider = null, owner = null, empties = [];
+let busy = false;
 
-function ready(){
-  if(typeof solanaWeb3 === "undefined"){
+function ready() {
+  if (typeof solanaWeb3 === "undefined") {
     say("Could not load the Solana library. Check your connection and reload the page.", true);
     return false;
   }
-  if(typeof Buffer === "undefined"){
-    say("Still loading. Wait a few seconds and tap again.", true);
+  if (typeof Buffer === "undefined") {
+    say("Still loading. Wait a few seconds and try again.", true);
     return false;
   }
-  if(!conn){
-    TOKEN_PROGRAM = new solanaWeb3.PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+  if (!conn) {
     conn = new solanaWeb3.Connection(RPC_URL, "confirmed");
   }
   return true;
 }
 
-// A brand-new wallet can only receive a transfer that leaves it rent-exempt (~0.00089 SOL).
-// If the fee wallet is still empty, a small fee transfer would make the whole transaction fail,
-// so the fee is skipped until the fee wallet holds enough.
-async function refreshFeeInfo(){
-  feeBal = null;
-  if(!feeOn()) return;
-  try{
-    if(minRent === null) minRent = await conn.getMinimumBalanceForRentExemption(0);
-    feeBal = await conn.getBalance(new solanaWeb3.PublicKey(FEE_WALLET));
-  }catch(e){ feeBal = null; }
-}
-function effectiveFee(lamports){
-  if(!feeOn()) return 0;
-  const fee = feeOf(lamports);
-  if(fee <= 0 || minRent === null || feeBal === null) return 0;
-  return feeBal + fee >= minRent ? fee : 0;
-}
-
-function findProvider(){
-  const p = window.phantom && window.phantom.solana;
-  if(p && p.isPhantom) return p;
+function findProvider() {
+  if (window.phantom?.solana?.isPhantom) return window.phantom.solana;
   return window.solana || null;
 }
 
-async function waitForProvider(){
-  for(let i = 0; i < 10; i++){
+async function waitForProvider() {
+  for (let i = 0; i < 12; i++) {
     const p = findProvider();
-    if(p) return p;
-    await new Promise(r => setTimeout(r, 200)); // wallets inject a moment after page load
+    if (p) return p;
+    await new Promise(r => setTimeout(r, 250));
   }
   return null;
 }
 
-function resetWallet(){
-  owner = null; empties = [];
+function resetWallet() {
+  owner = null;
+  empties = [];
   $("connect").textContent = "Connect wallet";
-  $("scan").disabled = true; $("reclaim").disabled = true;
-  $("amount").textContent = "—"; $("fee").textContent = "";
+  $("scan").disabled = true;
+  $("reclaim").disabled = true;
+  $("amount").textContent = "—";
+  $("fee").textContent = "";
   $("count").textContent = "Connect a wallet to scan for empty accounts.";
+  $("list-container").style.display = "none";
+  $("list-container").innerHTML = "";
+  $("txlink").hidden = true;
 }
 
-function hookProvider(){
-  if(!provider.on || provider.__dustoffHooked) return;
+function hookProvider() {
+  if (!provider.on || provider.__dustoffHooked) return;
   provider.__dustoffHooked = true;
   provider.on("disconnect", resetWallet);
   provider.on("accountChanged", pk => {
-    if(!pk){ resetWallet(); return; }
+    if (!pk) { resetWallet(); return; }
     owner = new solanaWeb3.PublicKey(pk.toString());
     $("connect").textContent = short(owner.toString());
     scan();
   });
 }
 
-async function connect(){
-  if(busy || !ready()) return;
+async function connect() {
+  if (busy || !ready()) return;
   busy = true;
-  try{
+  try {
     say("Connecting…");
     provider = await waitForProvider();
-    if(!provider){
-      if(/iPhone|iPad|Android/i.test(navigator.userAgent)){
+    if (!provider) {
+      if (/iPhone|iPad|Android/i.test(navigator.userAgent)) {
         say("Opening Phantom…");
         const u = encodeURIComponent(location.href.split("#")[0]);
         location.href = "https://phantom.app/ul/browse/" + u + "?ref=" + encodeURIComponent(location.origin);
@@ -228,130 +229,219 @@ async function connect(){
       say("No Solana wallet found. Install Phantom (phantom.app) and reload.", true);
       return;
     }
-    say("Wallet found. Approve the request in Phantom…");
+    say("Wallet found. Approve the request in your wallet…");
     const r = await provider.connect();
     owner = new solanaWeb3.PublicKey(((r && r.publicKey) || provider.publicKey).toString());
     hookProvider();
     $("connect").textContent = short(owner.toString());
-  }catch(e){
-    say(e && e.code === 4001 ? "Connection was declined in your wallet." : "Could not connect: " + ((e && e.message) || e), true);
+  } catch (e) {
+    say(e?.code === 4001 ? "Connection was declined in your wallet." : "Could not connect: " + (e?.message || e), true);
     return;
-  }finally{
+  } finally {
     busy = false;
   }
   await scan();
 }
 
-async function scan(){
-  if(!owner || !ready()) return;
+function renderList() {
+  const container = $("list-container");
+  if (empties.length === 0) {
+    container.style.display = "none";
+    container.innerHTML = "";
+    return;
+  }
+
+  const L = solanaWeb3.LAMPORTS_PER_SOL;
+  let html = "";
+  for (const a of empties) {
+    const mintShort = a.mint ? short(a.mint, 5) : "Unknown";
+    const rent = (a.lamports / L).toFixed(6);
+    html += `
+      <div class="account-item">
+        <div class="left">
+          <div class="mint">${mintShort}</div>
+          <div class="addr">${short(a.pubkey.toString(), 5)}</div>
+        </div>
+        <div class="rent">${rent} SOL</div>
+      </div>`;
+  }
+  container.innerHTML = html;
+  container.style.display = "block";
+}
+
+async function scan() {
+  if (!owner || !ready()) return;
   say("Scanning…");
-  $("reclaim").disabled = true; $("scan").disabled = true;
-  try{
-    const res = await conn.getParsedTokenAccountsByOwner(owner, {programId: TOKEN_PROGRAM});
+  $("reclaim").disabled = true;
+  $("scan").disabled = true;
+  empties = [];
+
+  try {
+    const programs = [
+      new solanaWeb3.PublicKey(TOKEN_PROGRAM),
+      new solanaWeb3.PublicKey(TOKEN_2022_PROGRAM)
+    ];
+
+    const results = await Promise.all(
+      programs.map(prog =>
+        conn.getParsedTokenAccountsByOwner(owner, { programId: prog }).catch(() => ({ value: [] }))
+      )
+    );
+
     const me = owner.toString();
-    // Only accounts that are empty, not frozen, and that this wallet is allowed to close
-    empties = res.value.filter(a => {
-      const i = a.account.data.parsed.info;
-      return i.tokenAmount.amount === "0" && i.state !== "frozen" && (!i.closeAuthority || i.closeAuthority === me);
-    });
-    await refreshFeeInfo();
-    const lamports = empties.reduce((s, a) => s + a.account.lamports, 0);
-    const fee = effectiveFee(lamports);
+    const all = [];
+
+    for (const res of results) {
+      for (const a of res.value) {
+        const info = a.account.data.parsed?.info;
+        if (!info) continue;
+        if (info.tokenAmount?.amount !== "0") continue;
+        if (info.state === "frozen") continue;
+        if (info.closeAuthority && info.closeAuthority !== me) continue;
+
+        all.push({
+          pubkey: a.pubkey,
+          mint: info.mint,
+          lamports: a.account.lamports,
+          program: a.account.owner.toString()
+        });
+      }
+    }
+
+    all.sort((a, b) => b.lamports - a.lamports);
+    empties = all;
+
+    const totalLamports = empties.reduce((s, a) => s + a.lamports, 0);
+    const fee = feeOf(totalLamports);
     const L = solanaWeb3.LAMPORTS_PER_SOL;
-    $("amount").textContent = (lamports / L).toFixed(4) + " SOL";
+
+    $("amount").textContent = (totalLamports / L).toFixed(4) + " SOL";
     $("fee").textContent = fee > 0
-      ? "Service fee (" + (FEE_BPS / 100) + "%): " + (fee / L).toFixed(5) + " SOL. You receive " + ((lamports - fee) / L).toFixed(5) + " SOL."
+      ? `Service fee (1%): ${(fee / L).toFixed(5)} SOL. You receive ${((totalLamports - fee) / L).toFixed(5)} SOL.`
       : "";
     $("count").textContent = empties.length
-      ? empties.length + " empty account" + (empties.length > 1 ? "s" : "") + " found."
+      ? `${empties.length} empty account${empties.length > 1 ? "s" : ""} found.`
       : "No empty accounts found. Your wallet is already tidy.";
+
+    renderList();
     $("reclaim").disabled = empties.length === 0;
     say("");
-  }catch(e){
-    say("Scan failed: " + ((e && e.message) || "the RPC may be rate-limited") + ". Tap Scan again to retry.", true);
-  }finally{
+  } catch (e) {
+    say("Scan failed: " + (e?.message || "the RPC may be rate-limited") + ". Tap Scan again to retry.", true);
+  } finally {
     $("scan").disabled = false;
   }
 }
 
-function closeIx(account){
+function closeIx(account, programId) {
   return new solanaWeb3.TransactionInstruction({
-    programId: TOKEN_PROGRAM,
+    programId: new solanaWeb3.PublicKey(programId),
     keys: [
-      {pubkey: account, isSigner: false, isWritable: true},
-      {pubkey: owner,   isSigner: false, isWritable: true}, // rent goes back to you
-      {pubkey: owner,   isSigner: true,  isWritable: false}
+      { pubkey: account, isSigner: false, isWritable: true },
+      { pubkey: owner, isSigner: false, isWritable: true },
+      { pubkey: owner, isSigner: true, isWritable: false }
     ],
     data: Buffer.from([9]) // CloseAccount
   });
 }
 
-async function send(tx){
-  if(provider.signAndSendTransaction){
+async function send(tx) {
+  if (provider.signAndSendTransaction) {
     const r = await provider.signAndSendTransaction(tx);
     return r.signature || r;
   }
   const signed = await provider.signTransaction(tx);
-  return conn.sendRawTransaction(signed.serialize());
+  return conn.sendRawTransaction(signed.serialize(), { skipPreflight: false });
 }
 
-async function confirmTx(sig, blockhash, lastValidBlockHeight){
-  const res = await conn.confirmTransaction({signature: sig, blockhash, lastValidBlockHeight}, "confirmed");
-  if(res && res.value && res.value.err){
-    let extra = "";
-    try{
-      const t = await conn.getTransaction(sig, {commitment: "confirmed", maxSupportedTransactionVersion: 0});
-      const logs = t && t.meta && t.meta.logMessages;
-      if(logs) extra = " | " + logs.slice(-2).join(" / ");
-    }catch(_){}
-    throw new Error("Transaction failed on-chain: " + JSON.stringify(res.value.err) + extra);
+async function confirmTx(sig, blockhash, lastValidBlockHeight) {
+  const res = await conn.confirmTransaction(
+    { signature: sig, blockhash, lastValidBlockHeight },
+    "confirmed"
+  );
+  if (res?.value?.err) {
+    throw new Error("Transaction failed on-chain: " + JSON.stringify(res.value.err));
   }
 }
 
-async function reclaim(){
-  if(busy || !owner || !ready()) return;
+async function reclaim() {
+  if (busy || !owner || !ready() || empties.length === 0) return;
   busy = true;
-  $("reclaim").disabled = true; $("scan").disabled = true;
+  $("reclaim").disabled = true;
+  $("scan").disabled = true;
+
   const batches = [];
-  for(let i = 0; i < empties.length; i += BATCH) batches.push(empties.slice(i, i + BATCH));
+  for (let i = 0; i < empties.length; i += BATCH) {
+    batches.push(empties.slice(i, i + BATCH));
+  }
+
   let ok = false;
-  try{
+  try {
     const bal = await conn.getBalance(owner);
-    if(bal < NETWORK_FEE_BUFFER * batches.length){
-      throw new Error("Your wallet needs a tiny amount of SOL (about 0.00005) to pay the network fee. Add a little SOL and try again.");
+    if (bal < NETWORK_FEE_BUFFER * batches.length) {
+      throw new Error("Your wallet needs a tiny bit more SOL to pay network fees (~0.00003 SOL per batch). Add a little SOL and try again.");
     }
-    await refreshFeeInfo();
-    for(let i = 0; i < batches.length; i++){
-      say("Approve transaction " + (i + 1) + " of " + batches.length + " in your wallet…");
+
+    for (let i = 0; i < batches.length; i++) {
+      say(`Building & simulating transaction ${i + 1} of ${batches.length}…`);
+
       const tx = new solanaWeb3.Transaction();
-      batches[i].forEach(a => tx.add(closeIx(a.pubkey)));
-      const fee = effectiveFee(batches[i].reduce((n, a) => n + a.account.lamports, 0));
-      if(fee > 0) tx.add(solanaWeb3.SystemProgram.transfer({
-        fromPubkey: owner, toPubkey: new solanaWeb3.PublicKey(FEE_WALLET), lamports: fee
-      }));
-      const {blockhash, lastValidBlockHeight} = await conn.getLatestBlockhash();
+      const batch = batches[i];
+      let batchLamports = 0;
+
+      for (const a of batch) {
+        tx.add(closeIx(a.pubkey, a.program));
+        batchLamports += a.lamports;
+      }
+
+      const fee = feeOf(batchLamports);
+      if (fee > 0) {
+        tx.add(solanaWeb3.SystemProgram.transfer({
+          fromPubkey: owner,
+          toPubkey: new solanaWeb3.PublicKey(FEE_WALLET),
+          lamports: fee
+        }));
+      }
+
+      const { blockhash, lastValidBlockHeight } = await conn.getLatestBlockhash("confirmed");
       tx.recentBlockhash = blockhash;
       tx.feePayer = owner;
+
+      // Simulate before asking for signature
+      const sim = await conn.simulateTransaction(tx);
+      if (sim.value.err) {
+        throw new Error("Simulation failed: " + JSON.stringify(sim.value.err));
+      }
+
+      say(`Approve transaction ${i + 1} of ${batches.length} in your wallet…`);
       const signature = await send(tx);
-      const link = $("txlink"); link.href = "https://solscan.io/tx/" + signature; link.hidden = false;
-      say("Confirming transaction " + (i + 1) + " of " + batches.length + "…");
+
+      const link = $("txlink");
+      link.href = "https://solscan.io/tx/" + signature;
+      link.hidden = false;
+
+      say(`Confirming transaction ${i + 1} of ${batches.length}…`);
       await confirmTx(signature, blockhash, lastValidBlockHeight);
-      if(fee > 0 && feeBal !== null) feeBal += fee;
     }
     ok = true;
-  }catch(e){
-    // keep the error on screen (do not rescan, which would erase it)
-    const detail = e ? (e.message || e.name || String(e)) : "unknown error";
-    say(e && e.code === 4001 ? "You declined the transaction. Nothing was changed." : "Stopped: " + detail, true);
-  }finally{
+  } catch (e) {
+    const msg = e?.code === 4001
+      ? "You declined the transaction. Nothing was changed."
+      : "Stopped: " + (e?.message || e);
+    say(msg, true);
+  } finally {
     busy = false;
     $("scan").disabled = false;
-    $("reclaim").disabled = !ok && empties.length === 0;
   }
-  if(!ok) return;
+
+  if (!ok) return;
+
   await scan();
-  if(empties.length > 0) say("Sent, but " + empties.length + " empty account(s) are still open. Tap 'View last transaction' to see why.", true);
-  else say("Done. Your SOL is back in your wallet.");
+  if (empties.length > 0) {
+    say(`Some accounts are still open (${empties.length}). Check the last transaction on Solscan.`, true);
+  } else {
+    say("Done. Your SOL is back in your wallet.");
+  }
 }
 
 $("connect").onclick = connect;
