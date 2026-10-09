@@ -7,6 +7,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.98.0/lib/index.iife.min.js"></script>
+<script type="module">
+// The Solana library needs a global Buffer in browsers; load a pinned polyfill.
+import { Buffer } from "https://cdn.jsdelivr.net/npm/buffer@6.0.3/+esm";
+window.Buffer = Buffer;
+</script>
 <style>
 :root{--bg:#07060b;--panel:#100e1a;--line:#26203d;--violet:#8b5cf6;--lilac:#c4b5fd;--text:#f4f2fb;--mute:#9a94b3}
 *{box-sizing:border-box}
@@ -138,6 +143,10 @@ let conn = null, TOKEN_PROGRAM = null, provider = null, owner = null, empties = 
 function ready(){
   if(typeof solanaWeb3 === "undefined"){
     say("Could not load the Solana library. Check your connection and reload the page.", true);
+    return false;
+  }
+  if(typeof Buffer === "undefined"){
+    say("Still loading. Wait a few seconds and tap again.", true);
     return false;
   }
   if(!conn){
